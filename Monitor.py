@@ -40,11 +40,8 @@ def check_for_crash():
 
 # Main loop
 while True:
+    print("Monitoring!!!")
     if check_for_crash():
         print("Application has crashed!")
-        # Code to display a message alert using a library like tkinter, pymsgbox, etc.
-        # You can also use other notification mechanisms here
-        # For example, if you want to send an email notification, use smtplib
-        # For simplicity, let's just print a message for now
 
-    time.sleep(30)  # Check every 30 seconds (you can adjust this as needed)
+    time.sleep(30)
