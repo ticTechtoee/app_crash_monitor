@@ -37,11 +37,33 @@ def check_for_crash():
 
     return False  # Return False if no matching event found
 
+    
+    # Clear log after reading
+
+def clear_event_log(log_name):
+    # Open the event log
+    hand = win32evtlog.OpenEventLog(None, log_name)
+
+    # Check if the event log was successfully opened
+    if hand is None:
+        print(f"Failed to open event log '{log_name}'")
+        return False
+
+    # Clear the event log
+    if not win32evtlog.ClearEventLog(hand, None):
+        print(f"Failed to clear event log '{log_name}'")
+        return False
+
+    print(f"Event log '{log_name}' cleared successfully")
+    return True
+
+
 
 # Main loop
 while True:
     print("Monitoring!!!")
     if check_for_crash():
         print("Application has crashed!")
+        clear_event_log("Application")
 
     time.sleep(30)
