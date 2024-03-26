@@ -2,6 +2,58 @@ import time
 import win32evtlogutil
 import win32evtlog
 import win32con
+# For Email Module
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import environ
+
+# Email Setup
+
+
+# Initialise environment variables
+env = environ.Env()
+environ.Env.read_env()
+
+GET_SENDER_EMAIL = env('SENDER_EMAIL')
+GET_RECEIVER_EMAIL = env('RECEIVER_EMAIL')
+GET_PASSWORD = env('EMAIL_PASSWORD')
+
+# Set up the email addresses and SMTP server
+sender_email = GET_SENDER_EMAIL
+receiver_email = GET_RECEIVER_EMAIL
+password = GET_PASSWORD
+smtp_server = "smtp.gmail.com"
+smtp_port = 587
+
+def send_script_email(email_subject, email_message):
+
+    # Create a multipart message and set headers
+    message = MIMEMultipart()
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    message["Subject"] = email_subject
+
+    # Add body to email
+    body = email_message
+    message.attach(MIMEText(body, "plain"))
+
+    # Log in to the SMTP server
+    server = smtplib.SMTP(smtp_server, smtp_port)
+    server.starttls()
+    server.login(sender_email, password)
+
+    # Send email
+    server.sendmail(sender_email, receiver_email, message.as_string())
+
+    # Quit SMTP server
+    server.quit()
+
+    return True
+
+
+
 
 # Define the name of your application's log file, source names, and event IDs
 app_log_name = "Application"
@@ -64,6 +116,7 @@ while True:
     print("Monitoring!!!")
     if check_for_crash():
         print("Application has crashed!")
+        send_script_email("Crash Report", "Your Application has crashed")
         clear_event_log("Application")
 
     time.sleep(30)
