@@ -59,41 +59,48 @@ def clear_application_logs():
         win32evtlog.CloseEventLog(hand)
         print("Application logs cleared successfully!")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred while clearing application logs: {e}")
 
 def check_for_crash():
     try:
         hand = win32evtlog.OpenEventLog(None, "Application")
         if hand is None:
             print("Failed to open event log 'Application'")
-            return False
+            return None
 
         flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
         events = win32evtlog.ReadEventLog(hand, flags, 0)
 
         if events is None:
             print("Failed to read events from event log 'Application'")
-            return False
+            return None
 
         for event in events:
             if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001]:
-                # event_time = datetime.fromtimestamp(event.TimeGenerated)  # Convert to Python datetime object
+                event_time = datetime.fromtimestamp(event.TimeGenerated).strftime("%Y-%m-%d %H:%M:%S")  # Convert to Python datetime object and format it
                 event_description = event.StringInserts
-                return event_description
+                # Extracting the application name from the event description
+                application_name = ""
+                for desc in event_description:
+                    if "Application Name:" in desc:
+                        application_name = desc.split(":")[1].strip()
+                        break
+                return event_time, application_name, event_description
 
-        return None, None
+        return None
     except Exception as e:
         print("An error occurred while checking for crash:", str(e))
-        return None, None
+        return None
 
 # Main loop
 while True:
     print("Monitoring!!!")
-    crash_description = check_for_crash()
-    if crash_description:
+    crash_info = check_for_crash()
+    if crash_info:
         print("Application has crashed!")
+        event_time, application_name, crash_description = crash_info
         email_subject = "Application Crash Report"
-        email_body = f"Application has crashed!\n\nTime:\nDescription: {crash_description}"
+        email_body = f"Application has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
         if send_email(email_subject, email_body):
             print("Email sent successfully")
             clear_application_logs()
