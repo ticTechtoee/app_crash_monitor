@@ -1,131 +1,103 @@
 import time
-import win32evtlogutil
 import win32evtlog
+import win32evtlogutil
 import win32con
-# For Email Module
-
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import ctypes
 import environ
+import sys
+from datetime import datetime  # Import datetime module
 
-# Email Setup
-
-
-# Initialise environment variables
+# Initialize environment variables
 env = environ.Env()
 environ.Env.read_env()
 
-GET_SENDER_EMAIL = env('SENDER_EMAIL')
-GET_RECEIVER_EMAIL = env('RECEIVER_EMAIL')
-GET_PASSWORD = env('EMAIL_PASSWORD')
-
-# Set up the email addresses and SMTP server
-sender_email = GET_SENDER_EMAIL
-receiver_email = GET_RECEIVER_EMAIL
-password = GET_PASSWORD
+# Email configuration
+sender_email = env('SENDER_EMAIL')
+receiver_email = env('RECEIVER_EMAIL')
+password = env('EMAIL_PASSWORD')
 smtp_server = "smtp.gmail.com"
 smtp_port = 587
 
-def send_script_email(email_subject, email_message):
+def is_admin():
     try:
-        # Create a multipart message and set headers
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except Exception as e:
+        print("An error occurred while checking admin privileges:", str(e))
+        return False
+
+def send_email(subject, body):
+    try:
         message = MIMEMultipart()
         message["From"] = sender_email
         message["To"] = receiver_email
-        message["Subject"] = email_subject
-
-        # Add body to email
-        body = email_message
+        message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
-        # Log in to the SMTP server
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(sender_email, password)
-
-        # Send email
         server.sendmail(sender_email, receiver_email, message.as_string())
-
-        # Quit SMTP server
         server.quit()
-
+        print("Email notification sent successfully")
         return True
     except Exception as e:
         print("An error occurred while sending the email:", str(e))
         return False
 
+def clear_application_logs():
+    try:
+        # Open the Application Event Log
+        hand = win32evtlog.OpenEventLog(None, "Application")
 
+        # Clear all the events in the Application Event Log
+        win32evtlog.ClearEventLog(hand, None)
 
+        # Close the Event Log handle
+        win32evtlog.CloseEventLog(hand)
+        print("Application logs cleared successfully!")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
-# Define the name of your application's log file, source names, and event IDs
-app_log_name = "Application"
-app_source_names = ["Application Error", "Windows Error Reporting"]
-app_event_ids = [1000, 1001]  # Event IDs for application error
-
-# Function to check for recent crash events
 def check_for_crash():
     try:
-        # Open the event log
-        hand = win32evtlog.OpenEventLog(None, app_log_name)
-
-        # Check if the event log was successfully opened
+        hand = win32evtlog.OpenEventLog(None, "Application")
         if hand is None:
-            print("Failed to open event log")
+            print("Failed to open event log 'Application'")
             return False
 
-        # Get the number of events in the log
         flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
         events = win32evtlog.ReadEventLog(hand, flags, 0)
 
-        # Check if events were successfully retrieved
         if events is None:
-            print("Failed to read events from event log")
+            print("Failed to read events from event log 'Application'")
             return False
 
-        # Iterate over each event
         for event in events:
-            # Check if the event source and event ID match
-            if event.SourceName in app_source_names and event.EventID in app_event_ids:
-                return True  # Return True if any matching event found
+            if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001]:
+                # event_time = datetime.fromtimestamp(event.TimeGenerated)  # Convert to Python datetime object
+                event_description = event.StringInserts
+                return event_description
 
-        return False  # Return False if no matching event found
+        return None, None
     except Exception as e:
         print("An error occurred while checking for crash:", str(e))
-        return False
-
-
-    # Clear log after reading
-
-def clear_event_log(log_name):
-    try:
-        # Open the event log
-        hand = win32evtlog.OpenEventLog(None, log_name)
-
-        # Check if the event log was successfully opened
-        if hand is None:
-            print(f"Failed to open event log '{log_name}'")
-            return False
-
-        # Clear the event log
-        if not win32evtlog.ClearEventLog(hand, None):
-            print(f"Failed to clear event log '{log_name}'")
-            return False
-
-        print(f"Event log '{log_name}' cleared successfully")
-        return True
-    except Exception as e:
-        print("An error occurred while clearing the event log:", str(e))
-        return False
-
-
+        return None, None
 
 # Main loop
 while True:
     print("Monitoring!!!")
-    if check_for_crash():
+    crash_description = check_for_crash()
+    if crash_description:
         print("Application has crashed!")
-        send_script_email("Crash Report", "Your Application has crashed")
-        clear_event_log("Application")
+        email_subject = "Application Crash Report"
+        email_body = f"Application has crashed!\n\nTime:\nDescription: {crash_description}"
+        if send_email(email_subject, email_body):
+            print("Email sent successfully")
+            clear_application_logs()
+        else:
+            print("Failed to send email notification")
 
     time.sleep(30)
