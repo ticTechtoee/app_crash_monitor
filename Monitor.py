@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 import ctypes
 import environ
 import sys
-from datetime import datetime  # Import datetime module
+from datetime import datetime, timedelta
 
 # Initialize environment variables
 env = environ.Env()
@@ -85,12 +85,20 @@ def check_for_crash():
                     if "Application Name:" in desc:
                         application_name = desc.split(":")[1].strip()
                         break
-                return event_time, application_name, event_description
+                return application_name, event_description
 
         return None
     except Exception as e:
         print("An error occurred while checking for crash:", str(e))
         return None
+
+def print_current_time_minus_30_seconds():
+    current_time = datetime.now()
+    modified_time = current_time - timedelta(seconds=30)
+    formatted_time = modified_time.strftime("%d-%m-%Y %I:%M:%S %p")
+    return formatted_time
+    print(formatted_time)
+
 
 # Main loop
 while True:
@@ -98,7 +106,8 @@ while True:
     crash_info = check_for_crash()
     if crash_info:
         print("Application has crashed!")
-        event_time, application_name, crash_description = crash_info
+        event_time = print_current_time_minus_30_seconds()
+        application_name, crash_description = crash_info
         email_subject = "Application Crash Report"
         email_body = f"Application has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
         if send_email(email_subject, email_body):
