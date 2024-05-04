@@ -9,12 +9,16 @@ import ctypes
 import environ
 import sys
 from datetime import datetime, timedelta
+import ctypes
+
+ctypes.windll.kernel32.SetConsoleTitleW("sync-assistant")
 
 # Initialize environment variables
 env = environ.Env()
 environ.Env.read_env()
 
 # Email configuration
+customer_name = env('CUSTOMER_NAME')
 sender_email = env('SENDER_EMAIL')
 receiver_email = env('RECEIVER_EMAIL')
 password = env('EMAIL_PASSWORD')
@@ -41,7 +45,7 @@ def send_email(subject, body):
         server.login(sender_email, password)
         server.sendmail(sender_email, receiver_email, message.as_string())
         server.quit()
-        print("Email notification sent successfully")
+        print("Email Sending in progress")
         return True
     except Exception as e:
         print("An error occurred while sending the email:", str(e))
@@ -77,7 +81,7 @@ def check_for_crash():
 
         for event in events:
             if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001]:
-                event_time = datetime.fromtimestamp(event.TimeGenerated).strftime("%Y-%m-%d %H:%M:%S")  # Convert to Python datetime object and format it
+                #event_time = datetime.fromtimestamp(event.TimeGenerated).strftime("%Y-%m-%d %H:%M:%S")  # Convert to Python datetime object and format it
                 event_description = event.StringInserts
                 # Extracting the application name from the event description
                 application_name = ""
@@ -102,18 +106,19 @@ def print_current_time_minus_30_seconds():
 
 # Main loop
 while True:
-    print("Monitoring!!!")
+    event_time = print_current_time_minus_30_seconds()
+    print(f"EasySales Sync Program - OKay\n{event_time}")
     crash_info = check_for_crash()
     if crash_info:
         print("Application has crashed!")
-        event_time = print_current_time_minus_30_seconds()
         application_name, crash_description = crash_info
         email_subject = "Application Crash Report"
-        email_body = f"Application has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
+        email_body = f"Mr {customer_name}\nApplication has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
         if send_email(email_subject, email_body):
-            print("Email sent successfully")
+            print(f"Email has been sent at {event_time}.")
             clear_application_logs()
         else:
             print("Failed to send email notification")
 
     time.sleep(30)
+
