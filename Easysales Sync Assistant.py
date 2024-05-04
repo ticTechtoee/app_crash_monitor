@@ -76,8 +76,8 @@ def check_for_crash():
             return None
 
         for event in events:
-            if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001, 10026]:
-                
+            if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001]:
+                event_time = datetime.fromtimestamp(event.TimeGenerated).strftime("%Y-%m-%d %H:%M:%S")  # Convert to Python datetime object and format it
                 event_description = event.StringInserts
                 # Extracting the application name from the event description
                 application_name = ""
