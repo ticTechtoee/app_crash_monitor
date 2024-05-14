@@ -7,23 +7,27 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import ctypes
 import environ
-import sys
 from datetime import datetime, timedelta
-import ctypes
+import os
+import subprocess
+import sys
 
-ctypes.windll.kernel32.SetConsoleTitleW("sync-assistant")
+# Constants
+CHECK_INTERVAL = 30  # seconds
 
 # Initialize environment variables
 env = environ.Env()
 environ.Env.read_env()
 
 # Email configuration
-customer_name = env('CUSTOMER_NAME')
-sender_email = env('SENDER_EMAIL')
-receiver_email = env('RECEIVER_EMAIL')
-password = env('EMAIL_PASSWORD')
-smtp_server = "smtp.gmail.com"
-smtp_port = 587
+CUSTOMER_NAME = env('CUSTOMER_NAME')
+SENDER_EMAIL = env('SENDER_EMAIL')
+RECEIVER_EMAIL = env('RECEIVER_EMAIL')
+EMAIL_PASSWORD = env('EMAIL_PASSWORD')
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+SET_RESTART_TIME = env('RESTART_TIME')
 
 def is_admin():
     try:
@@ -35,15 +39,15 @@ def is_admin():
 def send_email(subject, body):
     try:
         message = MIMEMultipart()
-        message["From"] = sender_email
-        message["To"] = receiver_email
+        message["From"] = SENDER_EMAIL
+        message["To"] = RECEIVER_EMAIL
         message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
-        server.login(sender_email, password)
-        server.sendmail(sender_email, receiver_email, message.as_string())
+        server.login(SENDER_EMAIL, EMAIL_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, message.as_string())
         server.quit()
         print("Email Sending in progress")
         return True
@@ -81,9 +85,7 @@ def check_for_crash():
 
         for event in events:
             if event.SourceName in ["Application Error", "Windows Error Reporting"] and event.EventID in [1000, 1001]:
-                #event_time = datetime.fromtimestamp(event.TimeGenerated).strftime("%Y-%m-%d %H:%M:%S")  # Convert to Python datetime object and format it
                 event_description = event.StringInserts
-                # Extracting the application name from the event description
                 application_name = ""
                 for desc in event_description:
                     if "Application Name:" in desc:
@@ -98,27 +100,69 @@ def check_for_crash():
 
 def print_current_time_minus_30_seconds():
     current_time = datetime.now()
-    modified_time = current_time - timedelta(seconds=30)
+    modified_time = current_time - timedelta(seconds=CHECK_INTERVAL)
     formatted_time = modified_time.strftime("%d-%m-%Y %I:%M:%S %p")
     return formatted_time
-    print(formatted_time)
 
+def main():
+    # Set console title
+    ctypes.windll.kernel32.SetConsoleTitleW("sync-assistant")
 
-# Main loop
-while True:
-    event_time = print_current_time_minus_30_seconds()
-    print(f"EasySales Sync Program - OKay\n{event_time}")
-    crash_info = check_for_crash()
-    if crash_info:
-        print("Application has crashed!")
-        application_name, crash_description = crash_info
-        email_subject = "Application Crash Report"
-        email_body = f"Mr {customer_name}\nApplication has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
-        if send_email(email_subject, email_body):
-            print(f"Email has been sent at {event_time}.")
-            clear_application_logs()
+    # Check if saved path exists
+    saved_path = read_path_from_file()
+
+    if saved_path and os.path.exists(saved_path):
+        print("Using saved path from 'application_path.txt':", saved_path)
+        while True:
+            event_time = print_current_time_minus_30_seconds()
+            print(f"EasySales Sync Program - OK!\n{event_time}")
+            crash_info = check_for_crash()
+            if crash_info:
+                print("Application has crashed!")
+                application_name, crash_description = crash_info
+                email_subject = "Application Crash Report"
+                email_body = f"Mr {CUSTOMER_NAME}\nApplication has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
+                if send_email(email_subject, email_body):
+                    print(f"Email has been sent at {event_time}.")
+                else:
+                    print("Failed to send email notification")
+                clear_application_logs()
+                time.sleep(int(SET_RESTART_TIME))
+                start_application(saved_path)
+                continue  # Resume monitoring for crashes
+            time.sleep(CHECK_INTERVAL)
+    else:
+        # Ask the user to provide the complete path of the application
+        path = input("Please provide the complete path of the application: ")
+
+        # Check if the provided path ends with '.exe'
+        if path.endswith('.exe') and os.path.exists(path):
+            print("Path exists. You provided:", path)
+            # Save the path to a text file
+            save_path_to_file(path)
+            print("Path saved to 'application_path.txt'.")
+            # Start monitoring for crashes
+            main()
         else:
-            print("Failed to send email notification")
+            print("Please provide the path of the application executable (.exe) and ensure it exists.")
 
-    time.sleep(30)
+def save_path_to_file(path):
+    with open("application_path.txt", "w") as file:
+        file.write(path)
 
+def read_path_from_file():
+    if os.path.exists("application_path.txt"):
+        with open("application_path.txt", "r") as file:
+            return file.read().strip()
+    return None
+
+def start_application(path):
+    if sys.platform == 'win32':
+        # On Windows, use ShellExecute to run with admin rights
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", path, None, None, 1)
+    else:
+        # On Unix-like systems, use sudo to run with admin rights
+        subprocess.call(['sudo', 'xdg-open', path])
+
+if __name__ == "__main__":
+    main()
