@@ -1,7 +1,6 @@
 import time
 import win32evtlog
-import win32evtlogutil
-import win32con
+import psutil
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -87,49 +86,81 @@ def print_current_time_minus_30_seconds():
     modified_time = current_time - timedelta(seconds=CHECK_INTERVAL)
     formatted_time = modified_time.strftime("%d-%m-%Y %I:%M:%S %p")
     return formatted_time
+
+def is_app_running(app_name):
+    # Convert the app name to lower case for case-insensitive comparison
+    app_name_lower = app_name.lower()
+
+    for proc in psutil.process_iter(['name']):
+        try:
+            # Log the process name for debugging
+            process_name = proc.info['name']
+            # Check if the process name matches the app name
+            if process_name and process_name.lower() == app_name_lower:
+                return True
+        except psutil.NoSuchProcess:
+            pass
+
+    return False
+
 def main():
     # Set console title
     ctypes.windll.kernel32.SetConsoleTitleW("sync-assistant")
     # Check if saved path exists
     saved_path = read_path_from_file()
-    if saved_path and os.path.exists(saved_path):
-        print("Using saved path from 'application_path.txt':", saved_path)
-        while True:
-            event_time = print_current_time_minus_30_seconds()
-            print(f"EasySales Sync Program - OK!\n{event_time}")
-            crash_info = check_for_crash()
-            if crash_info:
-                print("Application has crashed!")
-                application_name, crash_description = crash_info
-                print(f"Application Name: {crash_description[5]}")
-                if crash_description[5] == "EasySales.exe":
-                    email_subject = "Application Crash Report"
-                    email_body = f"Mr {CUSTOMER_NAME}\nApplication has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
-                    if send_email(email_subject, email_body):
-                        print(f"Email has been sent at {event_time}.")
-                    else:
-                        print("Failed to send email notification")
-                    clear_application_logs()
-                    time.sleep(int(SET_RESTART_TIME))
+    if is_app_running("EasySales.exe"):
+        if saved_path and os.path.exists(saved_path):
+            print("Using saved path from 'application_path.txt':", saved_path)
+            while True:
+                event_time = print_current_time_minus_30_seconds()
+                print(f"EasySales Sync Program - OK!\n{event_time}")
+                if is_app_running("EasySales.exe"):
+                    crash_info = check_for_crash()
+                    if crash_info:
+                        print("Application has crashed!")
+                        application_name, crash_description = crash_info
+                        print(f"Application Name: {crash_description[5]}")
+                        if crash_description[5] == "EasySales.exe":
+                            email_subject = "Application Crash Report"
+                            email_body = f"Mr {CUSTOMER_NAME}\nApplication has crashed!\n\nTime: {event_time}\nApplication Name: {application_name}\nDescription: {crash_description}"
+                            if send_email(email_subject, email_body):
+                                print(f"Email has been sent at {event_time}.")
+                            else:
+                                print("Failed to send email notification")
+                            clear_application_logs()
+                            time.sleep(int(SET_RESTART_TIME))
+                            if not is_app_running("EasySales.exe"):
+                                start_application(saved_path)
+                                continue
+                            else:
+                                continue
+                        else:
+                            clear_application_logs()
+                            continue
+                    time.sleep(CHECK_INTERVAL)
+                else:
                     start_application(saved_path)
                     continue
-                else:
-                    clear_application_logs()
-                    continue
-            time.sleep(CHECK_INTERVAL)
-    else:
-        # Ask the user to provide the complete path of the application
-        path = input("Please provide the complete path of the application: ")
-        # Check if the provided path ends with '.exe'
-        if path.endswith('.exe') and os.path.exists(path):
-            print("Path exists. You provided:", path)
-            # Save the path to a text file
-            save_path_to_file(path)
-            print("Path saved to 'application_path.txt'.")
-            # Start monitoring for crashes
-            main()
         else:
-            print("Please provide the path of the application executable (.exe) and ensure it exists.")
+            # Ask the user to provide the complete path of the application
+            path = input("Please provide the complete path of the application: ")
+            # Check if the provided path ends with '.exe'
+            if path.endswith('.exe') and os.path.exists(path):
+                print("Path exists. You provided:", path)
+                # Save the path to a text file
+                save_path_to_file(path)
+                print("Path saved to 'application_path.txt'.")
+                # Start monitoring for crashes
+                main()
+            else:
+                print("Please provide the path of the application executable (.exe) and ensure it exists.")
+    else:
+        print("EasySales.exe is not running")
+        start_application(saved_path)
+        time.sleep(10)
+        main()
+
+
 def save_path_to_file(path):
     with open("application_path.txt", "w") as file:
         file.write(path)
